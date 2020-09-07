@@ -1,15 +1,22 @@
-from app import app
-from app.forms import LoginForm
-from flask import render_template, flash, redirect, url_for
-from flask_login import current_user, login_user
+from app import app,db
+from app.forms import LoginForm,EditProfileForm,RegistrationForm
 from app.models import User
-from flask_login import logout_user
-from flask_login import login_required
+
+from flask import render_template, flash, redirect, url_for
+from flask_login import current_user, login_user,login_required,logout_user
+
 from flask import request
 from werkzeug.urls import url_parse
-from app.forms import RegistrationForm
-from app import db
+from datetime import datetime
 
+@app.before_request
+def before_request():
+    if current_user.is_authenticated:
+        current_user.last_seen = datetime.utcnow()
+        # If you are wondering why there is no db.session.add() before the commit,
+        # consider that when you reference current_user, Flask-Login will invoke the user loader callback function,
+        # which will run a database query that will put the target user in the database session. 
+        db.session.commit()
 
 @app.route('/')
 @app.route('/index')
@@ -78,3 +85,18 @@ def user(username):
         {'author': user, 'body': 'Test post #2'}
     ]
     return render_template('user.html', user=user, posts=posts)
+
+@app.route('/edit_profile',methods=['GET','POST'])
+@login_required
+def edit_profile():
+    form = EditProfileForm(current_user.username)
+    if form.validate_on_submit():
+        current_user.username = form.username.data
+        current_user.about_me = form.about_me.data
+        db.session.commit()
+        flash("Your changes has been saved")
+        return redirect(url_for('edit_profile'))
+    elif request.method == 'GET':
+        form.username.data=current_user.username
+        form.about_me.data=current_user.about_me
+    return render_template('edit_profile.html',titile= 'Edit profile',form =form)
